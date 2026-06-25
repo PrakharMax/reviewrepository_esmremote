@@ -122,6 +122,18 @@ python main.py --phase 4
 
 ---
 
+## Questionnaires
+
+This section contains the complete three-tier Experience Sampling Method (ESM) instruments deployed during the study. The surveys are structured into the following categories:
+
+* **Baseline Pre-Survey (Onboarding):** Administered once via Webropol prior to the monitoring period. Collects participant characteristics, residential building typology, building age, ventilation configuration, and typical remote work routines.
+* **Time-Contingent ESM (Daily Surveys):** Administered twice daily on weekdays via Webropol to capture within-day psychological and physical states.
+  * **Morning Assessment (09:00):** Captures perceived sleep quality, baseline cognitive focus/readiness, and physical symptoms upon waking.
+  * **Evening Assessment (17:00):** Evaluates perceived daily productivity, mood, perceived stress, and self-reported smartphone screen time.
+* **Event-Contingent Micro-Prompts:** Logged actively by participants via the Cozie Apple Watch application. Designed to capture specific state changes and behavioural actions, including workspace entry/exit, acute physical symptoms, visitor arrivals, and manual window opening for ventilation.
+
+---
+
 ## Citation & Contact
 
 If you utilize this pipeline or dataset in your research, please cite the original manuscript:
