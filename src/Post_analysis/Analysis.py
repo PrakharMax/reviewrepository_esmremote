@@ -1,15 +1,13 @@
-# phase_7_fast_diagnostics.py
 import pandas as pd
 import numpy as np
 import statsmodels.api as sm
 import matplotlib.pyplot as plt
 import sys
 import warnings
-from pathlib import Path
 from statsmodels.graphics.tsaplots import plot_acf, plot_pacf
 from config import DATA_DIR, OUTPUT_IMAGE_DIR
 
-# Suppress minor warnings for a clean console output
+# We suppress minor warnings for clean terminal output
 warnings.filterwarnings("ignore")
 
 # Set standardized publication plot typography
@@ -21,8 +19,8 @@ FILE_PATH = DATA_DIR / "Master_Cozie_Centered.csv"
 
 def run_diagnostics():
     """
-    Executes a fast OLS proxy model to generate marginal effect predictions
-    and temporal residual diagnostics (ACF/PACF).
+    We execute a fast OLS proxy model to generate marginal effect predictions
+    and temporal residual diagnostics (ACF/PACF) to validate model assumptions.
     """
     print("INFO: Initializing temporal diagnostics and marginal effects pipeline...")
 
@@ -65,7 +63,7 @@ def run_diagnostics():
     fig, axes = plt.subplots(1, 3, figsize=(20, 6), dpi=300)
 
     # A: Marginal Effects
-    # Using the established Coef: -0.005 and Intercept: 75.386
+    # We use the established Coef: -0.005 and Intercept: 75.386 from our preliminary analysis
     co2_range = np.linspace(df_diag['Within_CO2'].min(), df_diag['Within_CO2'].max(), 100)
     hr_pred = 75.386 + (-0.005) * co2_range
 

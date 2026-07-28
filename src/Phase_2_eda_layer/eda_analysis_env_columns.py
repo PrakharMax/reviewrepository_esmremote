@@ -1,4 +1,3 @@
-# phase_2_eda_analysis_env_columns.py
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -7,21 +6,24 @@ from config import DATA_DIR, OUTPUT_IMAGE_DIR
 # Path configuration for the cleaned, centered dataset
 CENTERED_FILE = DATA_DIR / "Master_Cozie_Centered.csv"
 
+# Ensure our output directory exists before saving plots
+OUTPUT_IMAGE_DIR.mkdir(parents=True, exist_ok=True)
 
 def generate_eda_plots():
     """
-    Generates exploratory data analysis plots, evaluating within-person variations,
-    physiological tracking profiles, and early correlation patterns across the cohort.
+    We generate exploratory data analysis plots here to evaluate within-person variations,
+    physiological tracking profiles, and early correlation patterns across our cohort.
     """
-    print("INFO: Loading centered dataset for exploratory data analysis...")
+    print("INFO: Loading our centered dataset for exploratory data analysis...")
     df = pd.read_csv(CENTERED_FILE, low_memory=False)
 
-    # Selection of standard seaborn visual parameters optimized for academic publication
+    # We set standard seaborn visual parameters to optimize our plots for academic publication.
     sns.set_theme(style="whitegrid", palette="muted")
 
     # ---------------------------------------------------------
-    # Distribution of Within-Person CO2 Deviations
+    # PLOT 1: Distribution of Within-Person CO2 Deviations
     # ---------------------------------------------------------
+    # We plot the distribution of within-person CO2 fluctuations to verify our centering.
     plt.figure(figsize=(10, 6))
     sns.histplot(df['Within_CO2'], bins=50, kde=True, color='teal')
     plt.title('Distribution of Within-Person CO2 Fluctuations (Deviations from Normal)', fontsize=14)
@@ -35,10 +37,10 @@ def generate_eda_plots():
     print("INFO: Saved visualization: 1_Within_CO2_Distribution.png")
 
     # ---------------------------------------------------------
-    # Cardiovascular Tracking Ranges per Participant Identifier
+    # PLOT 2: Cardiovascular Tracking Ranges per Participant
     # ---------------------------------------------------------
     plt.figure(figsize=(14, 8))
-    # Missing observations are dropped exclusively for visualization stability
+    # We drop missing observations here exclusively to ensure the boxplots draw cleanly.
     hr_data = df.dropna(subset=['HR_Pre_10m_Avg'])
     sns.boxplot(x='ID', y='HR_Pre_10m_Avg', data=hr_data, width=0.6)
     plt.xticks(rotation=45, ha='right')
@@ -51,15 +53,16 @@ def generate_eda_plots():
     print("INFO: Saved visualization: 2_Participant_HR_Boxplots.png")
 
     # ---------------------------------------------------------
-    # Evaluation of Raw Matrix Covariances
+    # PLOT 3: Evaluation of Raw Matrix Covariances
     # ---------------------------------------------------------
+    # We select our key continuous variables to check for early correlations.
     vars_of_interest = [
         'Within_CO2', 'Between_CO2',
         'HR_Pre_10m_Avg', 'Steps_Pre_10m_Sum',
         'Within_Temperature', 'Within_Humidity'
     ]
 
-    # Safe validation extraction to ensure variables match target data structure columns
+    # We safely filter the list to ensure we only correlate columns that actually exist in the dataframe.
     existing_vars = [v for v in vars_of_interest if v in df.columns]
     corr_matrix = df[existing_vars].corr()
 
@@ -70,7 +73,6 @@ def generate_eda_plots():
     plt.savefig(OUTPUT_IMAGE_DIR / '3_Correlation_Heatmap.png', dpi=300)
     plt.close()
     print("INFO: Saved visualization: 3_Correlation_Heatmap.png")
-
 
 if __name__ == "__main__":
     generate_eda_plots()

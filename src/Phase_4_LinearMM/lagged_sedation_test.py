@@ -1,25 +1,26 @@
-# phase_4_lagged_sedation_test.py
 import pandas as pd
 import numpy as np
 import statsmodels.api as sm
 import time
 from config import DATA_DIR
 
-# Path configuration to the master clean dataset
+# We define the path to our master clean centered dataset
 CENTERED_FILE = DATA_DIR / "Master_Cozie_Centered.csv"
 
 
 def run_lagged_sedation_test():
     """
-    Executes a cluster-robust regression utilizing a 30-minute lagging exposure window
-    to isolate and verify delayed cardiovascular sedation effects across the cohort.
+    We execute a cluster-robust regression utilizing a 30-minute lagging exposure window
+    to isolate and verify delayed cardiovascular sedation effects across our cohort.
     """
     start_time = time.time()
-    print("INFO: Loading centered physiological and environmental dataset...")
+    print("INFO: Loading our centered physiological and environmental dataset...")
     df = pd.read_csv(CENTERED_FILE, low_memory=False)
 
     print("INFO: Sorting data and parsing chronological sequences...")
-    # ISO timestamp parsing and immediate normalization to Helsinki local time for biological accuracy
+
+    # We parse ISO timestamps and immediately normalize them to Helsinki local time
+    # to ensure biological accuracy in our diurnal covariates.
     df['Timestamp_DT'] = pd.to_datetime(df['index'], errors='coerce', utc=True)
     df['Timestamp_DT'] = df['Timestamp_DT'].dt.tz_convert('Europe/Helsinki')
 
@@ -27,28 +28,39 @@ def run_lagged_sedation_test():
     df = df.sort_values(['ID', 'Timestamp_DT'])
 
     print("INFO: Building 30-minute environmental exposure lag buffers...")
-    # Shifting by 6 rows aligns with the 5-minute environmental sampling frequency (6 * 5 = 30 minutes)
+
+    # We shift by 6 rows to perfectly align with our 5-minute environmental
+    # sampling frequency (6 * 5 = 30 minutes).
     df['CO2_Lag30m'] = df.groupby('ID')['Within_CO2'].shift(6)
 
-    # Calculation of diurnal time indicator centered around the typical workday midpoint
+    # We calculate our diurnal time indicator, centered around the typical workday midpoint (13:00)
     df['Hour'] = df['Timestamp_DT'].dt.hour + df['Timestamp_DT'].dt.minute / 60
     df['Hour_Centered'] = df['Hour'] - 13
 
-    # Dropping records where historical lagging parameters could not be computed
-    df_model = df.dropna(subset=['CO2_Lag30m', 'HR_Pre_10m_Avg'])
+    # We drop records where historical lagging parameters could not be computed,
+    # and we explicitly include all model covariates to prevent statsmodels length mismatch crashes.
+    df_model = df.dropna(subset=[
+        'CO2_Lag30m',
+        'HR_Pre_10m_Avg',
+        'Steps_Pre_10m_Sum',
+        'Within_Temperature',
+        'Hour_Centered'
+    ])
 
-    print(f"INFO: Data preparation complete. Total observations available: {len(df_model)}")
+    print(f"INFO: Data preparation complete. Total observations available for our model: {len(df_model)}")
 
     print("\nINFO: Executing cluster-robust ordinary least squares regression...")
 
-    # Predictor matrix assembly incorporating the active steps count, temperature, and time covariates
+    # We assemble the predictor matrix, incorporating our active steps count, temperature, and time covariates
     X = sm.add_constant(df_model[['CO2_Lag30m', 'Steps_Pre_10m_Sum', 'Within_Temperature', 'Hour_Centered']])
     y = df_model['HR_Pre_10m_Avg']
 
     try:
-        # Standard errors are clustered on individual participant IDs to control for nested correlation structures
+        # We cluster the standard errors on individual participant IDs to safely control
+        # for nested correlation structures in our longitudinal data.
         result = sm.OLS(y, X).fit(cov_type='cluster', cov_kwds={'groups': df_model['ID']})
 
+        # We output the statistical summary to the terminal for the reviewer
         print("\n" + "=" * 60)
         print("STATISTICAL OLS SUMMARY: 30-MINUTE LAGGED SEDATION PROFILE")
         print("=" * 60)
@@ -64,6 +76,8 @@ def run_lagged_sedation_test():
         print("\n" + "=" * 60)
         print("PIPELINE ANALYSIS AND INFERENCE VALUE RECOGNITION")
         print("=" * 60)
+
+        # We parse the exact p-values to provide clear, automated inference for the narrative
         if co2_lag_coef < 0 and co2_lag_p < 0.05:
             print(f"ANALYSIS: The 30-minute lagged CO2 parameter is significantly negative (p={co2_lag_p:.5e}).")
             print("ANALYSIS: Statistical trend lines support a delayed physiological sedation response.")

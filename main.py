@@ -1,8 +1,8 @@
-# run_pipeline.py
 import subprocess
 import argparse
 import sys
 import time
+import os
 from pathlib import Path
 
 # =============================================================================
@@ -31,7 +31,7 @@ PHASES = {
         "src/Phase_6_psychological_model/environmental_moderation_lmm.py",
         "src/Phase_6_psychological_model/morning_cognitive_hangover_lmm.py",
         "src/Phase_6_psychological_model/morning_wellbeing_lmm.py",
-        "src/Phase_6_psychological_model/psychological_mediation_lmm.py",  # Note: Ensure no double-dot typo in filename
+        "src/Phase_6_psychological_model/psychological_mediation_lmm.py",
         "src/Phase_6_psychological_model/screentime_confounder_lmm.py",
         "src/Phase_6_psychological_model/social_presence_confounder_lmm.py",
         "src/Phase_6_psychological_model/subjective_wellbeing_lmm.py"
@@ -42,14 +42,13 @@ PHASES = {
         "src/Phase_7_Plots/master_synthesis_forest_plot.py",
         "src/Phase_7_Plots/psychological_publication_figures.py",
         "src/Phase_7_Plots/scientific_visuals.py",
-        "src/Phase_7_Plots/variance_decomposition.py",
-        "src/Phase_7_Plots/variance_decomposition_plot.py"
+        "src/Phase_7_Plots/variance_stats_analysis.py",
+        "src/Phase_7_Plots/variance_centering_viz.py"
     ],
     8: [
         "src/Post_analysis/Analysis.py"
     ]
 }
-
 
 def print_header(text, symbol="="):
     """Utility to print clean, professional section headers to the terminal."""
@@ -70,15 +69,18 @@ def run_script(script_path):
     print(f" -> Executing: {script_file.name} ...")
     start_time = time.time()
 
+    # FIX: Prepare the environment and inject PYTHONPATH
+    env = os.environ.copy()
+    env["PYTHONPATH"] = os.getcwd()
+
     try:
-        # Run the script, piping output directly to the terminal
-        subprocess.run([sys.executable, str(script_file)], check=True)
+        # Run the script with the custom environment
+        subprocess.run([sys.executable, str(script_file)], check=True, env=env)
         elapsed = time.time() - start_time
         print(f"    [SUCCESS] Completed in {elapsed:.2f}s\n")
     except subprocess.CalledProcessError:
         print(f"\n[ERROR] PIPELINE HALTED: Subprocess crashed while executing {script_file.name}")
         sys.exit(1)
-
 
 def execute_phase(phase_id):
     """Handles the execution logic for a specific phase, including Phase 1 locks."""
@@ -98,15 +100,14 @@ def execute_phase(phase_id):
     for script in PHASES[phase_id]:
         run_script(script)
 
-
 def main():
     parser = argparse.ArgumentParser(
         description="Master Orchestration Pipeline for Remote Worker ESM Study",
         formatter_class=argparse.RawTextHelpFormatter,
         epilog=(
             "Examples:\n"
-            "  python run_pipeline.py            (Runs the entire open-source pipeline: Phases 2-8)\n"
-            "  python run_pipeline.py --phase 7  (Runs ONLY the publication plotting scripts)"
+            "  python main.py            (Runs the entire open-source pipeline: Phases 2-8)\n"
+            "  python main.py --phase 7  (Runs ONLY the publication plotting scripts)"
         )
     )
     parser.add_argument(

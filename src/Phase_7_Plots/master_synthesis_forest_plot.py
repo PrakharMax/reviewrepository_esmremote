@@ -1,4 +1,3 @@
-# phase_7_master_synthesis_forest_plot.py
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
@@ -12,7 +11,7 @@ def generate_forest_plot():
     """
     print("INFO: Initializing master publication forest plot visualization...")
 
-    # Multi-dimensional registry tracking standardized effect sizes and confidence intervals
+    # We define our multi-dimensional registry tracking standardized effect sizes and confidence intervals
     results = [
         # --- PART I: THE BODY (Objective Physiology) ---
         ("HEADER", "PART I: The Body\n(Objective Physiology)", np.nan, np.nan, np.nan, 1.0),
@@ -44,14 +43,14 @@ def generate_forest_plot():
         ("Phase 6: Morning Relaxation", "Overnight CO2 (per 100ppm)", 0.000, 0.000, 0.000, 0.723)
     ]
 
-    # Chronological sorting for inverted y-axis mapping alignment
+    # We execute chronological sorting for inverted y-axis mapping alignment
     df = pd.DataFrame(results, columns=["Model", "Predictor", "Coef", "CI_Lower", "CI_Upper", "P_val"])
     df = df.iloc[::-1].reset_index(drop=True)
 
     df['err_lower'] = df['Coef'] - df['CI_Lower']
     df['err_upper'] = df['CI_Upper'] - df['Coef']
 
-    # Rendering localized categorical tick descriptions
+    # We render localized categorical tick descriptions
     labels = []
     for idx, row in df.iterrows():
         if row['Model'] == 'HEADER':
@@ -127,7 +126,7 @@ def generate_forest_plot():
     ax.spines['right'].set_visible(False)
     ax.grid(axis='x', linestyle=':', alpha=0.6)
 
-    # Save figure to the unified outputs repository folder
+    # We save the figure to the unified outputs repository folder
     plt.tight_layout()
     output_file = OUTPUT_IMAGE_DIR / '6_Master_Thesis_Forest_Plot.png'
     plt.savefig(output_file, dpi=300, bbox_inches='tight')

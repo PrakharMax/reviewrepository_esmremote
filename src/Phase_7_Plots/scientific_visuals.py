@@ -1,4 +1,3 @@
-# phase_7_scientific_visuals.py
 import pandas as pd
 import statsmodels.formula.api as smf
 import statsmodels.api as sm
@@ -9,12 +8,11 @@ import numpy as np
 import sys
 import warnings
 from matplotlib.colors import LinearSegmentedColormap
-
-# Suppress warnings globally for clean terminal output during visualization
-warnings.filterwarnings("ignore")
-
-# Import centralized configuration paths
 from config import DATA_DIR, OUTPUT_IMAGE_DIR
+
+# We suppress convergence warnings globally to ensure clean execution and console output
+# throughout the scientific visualization pipeline.
+warnings.filterwarnings("ignore")
 
 # --- 1. CONFIGURATION ---
 EVENING_FILE = DATA_DIR / "Master_Evening_Centered.csv"
@@ -23,12 +21,12 @@ COZIE_FILE = DATA_DIR / "Master_Cozie_Centered.csv"
 
 
 def clean_likert(series):
-    """Safely extracts leading digits from Webropol strings."""
+    """We extract leading digits from Webropol survey strings to ensure numerical compatibility for modeling."""
     return series.astype(str).str.extract(r'(\d)')[0].astype(float)
 
 
 def run_phase7_scientific_visuals():
-    print("INFO: Phase 7 - Executing Ultimate Scientific Visualization Pipeline...")
+    print("INFO: Phase 7 - Executing ultimate scientific visualization pipeline...")
 
     try:
         df_eve = pd.read_csv(EVENING_FILE, low_memory=False)
@@ -44,16 +42,17 @@ def run_phase7_scientific_visuals():
     df_cozie['ID'] = df_cozie['ID'].astype(str)
 
     df_morn['Morning_Focus'] = clean_likert(df_morn[
-                                                'Rate your focus level right now (1–5) Please select the option that best describes your current focus level:'])
+        'Rate your focus level right now (1–5) Please select the option that best describes your current focus level:'])
     df_morn['Good_Sleep'] = df_morn['Control_Good_Sleep']
 
     # --- TIME PARSING FOR CONTINUOUS DATA ---
+    # We parse and normalize timestamps to Helsinki local time to maintain biological consistency.
     df_cozie['Timestamp_DT'] = pd.to_datetime(df_cozie['index'], errors='coerce', utc=True)
     df_cozie['Timestamp_DT'] = df_cozie['Timestamp_DT'].dt.tz_convert('Europe/Helsinki')
     df_cozie['Hour_of_Day'] = df_cozie['Timestamp_DT'].dt.hour + (df_cozie['Timestamp_DT'].dt.minute / 60.0)
     df_cozie['Hour_Centered'] = df_cozie['Hour_of_Day'] - 13
 
-    # Create the 30-min lag variable
+    # We construct the 30-min lag variable for cardiovascular sensitivity analysis
     df_cozie = df_cozie.sort_values(['ID', 'Timestamp_DT'])
     df_cozie['CO2_Lag30m'] = df_cozie.groupby('ID')['Within_CO2'].shift(6)
 
@@ -72,8 +71,8 @@ def run_phase7_scientific_visuals():
     lag_model = sm.OLS(df_lag['HR_Pre_10m_Avg'], X_lag).fit(cov_type='cluster', cov_kwds={'groups': df_lag['ID']})
 
     # --- PART C: THE PSYCHOLOGICAL DELTAS ---
-    df_h1 = df_eve.dropna(subset=['Productivity_Retention_Gap', 'Within_CO2', 'ID']).copy()
-    h1_res = smf.mixedlm("Productivity_Retention_Gap ~ Within_CO2", df_h1, groups=df_h1["ID"]).fit()
+    df_h1 = df_eve.dropna(subset=['Productivity_Retention_Gap', 'Within_Daily_CO2', 'ID']).copy()
+    h1_res = smf.mixedlm("Productivity_Retention_Gap ~ Within_Daily_CO2", df_h1, groups=df_h1["ID"]).fit()
 
     df_h4 = df_morn.dropna(subset=['Morning_Focus', 'Within_CO2', 'Good_Sleep', 'ID']).copy()
     h4_res = smf.mixedlm("Morning_Focus ~ Within_CO2 + Good_Sleep", df_h4, groups=df_h4["ID"]).fit()
@@ -94,7 +93,7 @@ def run_phase7_scientific_visuals():
     forest_data = [
         {'Label': 'Real-Time HR Sedation (LMM)', 'Res': hr_model, 'Var': 'Within_CO2'},
         {'Label': 'Delayed HR Sedation (30m Lag)', 'Res': lag_model, 'Var': 'CO2_Lag30m'},
-        {'Label': 'Workday: Focus Gap', 'Res': h1_res, 'Var': 'Within_CO2'},
+        {'Label': 'Workday: Focus Gap', 'Res': h1_res, 'Var': 'Within_Daily_CO2'},
         {'Label': 'Baseline: Morning Focus', 'Res': h4_res, 'Var': 'Within_CO2'},
         {'Label': 'Baseline: Effect of Sleep', 'Res': h4_res, 'Var': 'Good_Sleep'}
     ]
@@ -125,13 +124,13 @@ def run_phase7_scientific_visuals():
     # --- FIGURE 3: THE SEDATION TREND (COVARIATE ADJUSTED) ---
     plt.figure(figsize=(10, 6))
 
-    # 1. Custom Colormap: Forces the density cloud to stay silver/gray
+    # We initialize a custom colormap to ensure density clusters remain legible in publication grayscale
     soft_grey = LinearSegmentedColormap.from_list('soft_grey', ['#ffffff', '#eeeeee', '#bbbbbb'])
 
     plt.hexbin(df_hr['Within_CO2'], df_hr['HR_Pre_10m_Avg'],
                gridsize=80, cmap=soft_grey, bins='log', mincnt=1, linewidths=0)
 
-    # 2. Covariate Baselines & Prediction Design
+    # Covariate baselines and prediction design
     x_range = np.linspace(-600, 600, 100)
     mean_steps = df_hr['Steps_Pre_10m_Sum'].mean()
     mean_temp = df_hr['Within_Temperature'].mean()
@@ -147,7 +146,7 @@ def run_phase7_scientific_visuals():
 
     y_pred = hr_model.predict(X_pred)
 
-    # 3. Covariance Matrix Math for the CI
+    # Covariance matrix arithmetic for confidence interval derivation
     cov_matrix = hr_model.cov_params()[X_pred.columns].loc[X_pred.columns]
     pred_var = np.diag(np.dot(np.dot(X_pred, cov_matrix), X_pred.T))
     pred_se = np.sqrt(pred_var)
@@ -155,29 +154,28 @@ def run_phase7_scientific_visuals():
     ci_upper = y_pred + (1.96 * pred_se)
     ci_lower = y_pred - (1.96 * pred_se)
 
-    # 4. Color Balance: Muted Burgundy Trendline and Lighter CI
+    # Narrative visualization: Muted Burgundy Trendline and Lighter CI
     burgundy = '#800020'
     lighter_burgundy = '#b36680'
-    plt.plot(x_range, y_pred, color=burgundy, linewidth=3, label='Adjusted LMM Trend')
+    plt.plot(x_range, y_pred, color=burgundy, linewidth=3, label='Adjusted GEE Trend')
 
     plt.fill_between(x_range, ci_lower, ci_upper, color=lighter_burgundy, alpha=0.15, label='95% CI')
 
     plt.scatter([], [], color='gray', alpha=0.4, label='Observation Density')
 
-    # 5. Axis Scaling: Cropped to the meaningful variance
+    # Axis scaling: Cropped to the meaningful environmental variance
     plt.ylim(55, 125)
     plt.xlim(-600, 600)
 
-    # 6. Narrative Title (Updated to use standard LaTeX formatting)
-    plt.title("Heart Rate Declines Slightly with Elevated $CO_2$ (Adjusted LMM Trend)",
-              fontsize=14, fontweight='bold', pad=15)
+    # Final narrative elements
+    plt.title("Heart Rate Declines Slightly with Elevated $CO_2$ (Adjusted GEE Trend)",
+          fontsize=14, fontweight='bold', pad=15)
     plt.xlabel("$CO_2$ Deviation from Personal Baseline (ppm)", fontsize=12)
     plt.ylabel("Continuous Heart Rate (BPM)", fontsize=12)
 
-    # 7. The Interpretive Stats Box
+    # Interpretive statistics box
     beta_val = hr_model.params['Within_CO2']
-
-    stat_text = (f"Model: Linear Mixed-Effects\n"
+    stat_text = (f"Model: Generalized Estimating Equations\n"
                  f"Controls: Time, Steps, Temp\n"
                  f"N = {len(df_hr):,}\n"
                  f"β = {beta_val:.3f} BPM/ppm\n"

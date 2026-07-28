@@ -1,4 +1,3 @@
-# phase_4_model_diagnostics.py
 import pandas as pd
 import numpy as np
 import statsmodels.api as sm
@@ -8,17 +7,17 @@ import time
 import warnings
 from config import DATA_DIR
 
-# Suppress matrix convergence warnings during recursive looping operations
+# We suppress matrix convergence warnings during recursive looping operations
 warnings.filterwarnings("ignore")
 
-# Path configuration to the processed longitudinal dataset
+# We define the path to our processed longitudinal dataset
 CENTERED_FILE = DATA_DIR / "Master_Cozie_Centered.csv"
 
 
 def prepare_lagged_data():
     """
-    Loads centered longitudinal data, enforces temporal indexing patterns,
-    and constructs a discrete 30-minute lagging environmental exposure window.
+    We load centered longitudinal data, enforce temporal indexing patterns,
+    and construct a discrete 30-minute lagging environmental exposure window.
     """
     print("INFO: Loading dataset for robust model diagnostics...")
     df = pd.read_csv(CENTERED_FILE, low_memory=False)
@@ -27,14 +26,14 @@ def prepare_lagged_data():
     df = df.dropna(subset=['Timestamp_DT', 'HR_Pre_10m_Avg', 'Within_CO2'])
     df = df.sort_values(['ID', 'Timestamp_DT'])
 
-    # Construction of a 30-minute lagged window based on localized sampling frequency intervals
+    # We construct a 30-minute lagged window based on localized sampling frequency intervals
     df['CO2_Lag30m'] = df.groupby('ID')['Within_CO2'].shift(6)
 
-    # Derivation of fractional daytime indicators centered around the workday midpoint
+    # We derive fractional daytime indicators centered around the workday midpoint
     df['Hour'] = df['Timestamp_DT'].dt.hour + df['Timestamp_DT'].dt.minute / 60
     df['Hour_Centered'] = df['Hour'] - 13
 
-    # Clean dataset configuration isolating complete observations across specified parameters
+    # We clean the dataset by isolating complete observations across specified parameters
     df_model = df.dropna(
         subset=['CO2_Lag30m', 'HR_Pre_10m_Avg', 'Within_Steps_Sum', 'Within_Temperature', 'Hour_Centered'])
     return df_model
@@ -42,13 +41,14 @@ def prepare_lagged_data():
 
 def run_vif_analysis(df):
     """
-    Computes Variance Inflation Factors (VIF) to detect potential multicollinearity
+    We compute Variance Inflation Factors (VIF) to detect potential multicollinearity
     among continuous environmental and physical confounder variables.
     """
     print("\n" + "=" * 60)
     print("DIAGNOSTIC TEST 1: VARIANCE INFLATION FACTOR (VIF) ANALYSIS")
     print("=" * 60)
 
+    # We select our predictor matrix and add the required constant
     features = df[['CO2_Lag30m', 'Within_Steps_Sum', 'Within_Temperature', 'Hour_Centered']]
     X = sm.add_constant(features)
 
@@ -63,7 +63,7 @@ def run_vif_analysis(df):
 
 def run_bridge_model(df):
     """
-    Executes a lagged random-intercept linear mixed-effects model to assess the stability
+    We execute a lagged random-intercept linear mixed-effects model to assess the stability
     of physiological heart rate responses to preceding environmental exposure states.
     """
     print("\n" + "=" * 60)
@@ -80,6 +80,7 @@ def run_bridge_model(df):
 
         co2_p = result.pvalues['CO2_Lag30m']
         print(f"\nINFO: Statistical significance inference value for lagged CO2: {co2_p:.5e}")
+
         if co2_p < 0.05:
             print("STATUS: Environmental parameter significance survived mixed-effects convergence checks.")
         else:
@@ -91,7 +92,7 @@ def run_bridge_model(df):
 
 def run_leave_one_out(df):
     """
-    Performs a jackknife leave-one-out sensitivity analysis to determine whether
+    We perform a jackknife leave-one-out sensitivity analysis to determine whether
     the overall cohort trend is driven by outlier participant datasets.
     """
     print("\n" + "=" * 60)
@@ -104,13 +105,13 @@ def run_leave_one_out(df):
     results = []
 
     for exclude_id in participants:
-        # Systematic exclusion of a single target participant identifier
+        # We systematically exclude a single target participant identifier per loop
         df_subset = df[df['ID'] != exclude_id]
 
         X = sm.add_constant(df_subset[['CO2_Lag30m', 'Within_Steps_Sum', 'Within_Temperature', 'Hour_Centered']])
         y = df_subset['HR_Pre_10m_Avg']
 
-        # Cluster-robust standard errors are applied over iterative loops to guarantee computational execution stability
+        # We apply cluster-robust standard errors over iterative loops to guarantee computational execution stability
         model = sm.OLS(y, X).fit(cov_type='cluster', cov_kwds={'groups': df_subset['ID']})
 
         coef = model.params['CO2_Lag30m']
@@ -133,6 +134,7 @@ def run_leave_one_out(df):
     else:
         print(
             "STATUS: Statistical parameter significance lost during loop execution. Associations are structurally influenced by sub-group outlier records.")
+
         culprits = df_results[df_results['P_Value'] >= 0.05]
         print("\nInfluential Outlier Identifiers Found:")
         print(culprits)

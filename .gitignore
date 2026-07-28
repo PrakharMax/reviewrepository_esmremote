@@ -1,14 +1,10 @@
-# Block local generated outputs and figures from being tracked
-Generated_Images/
-
-# Block your virtual environment folder
-.venv/
-venv/
-
-# Block OS-specific junk files
+# macOS
 .DS_Store
-Thumbs.db
 
-# Block IDE configuration settings
+# Python
+__pycache__/
+*.py[cod]
+
+# IDEs
 .idea/
 .vscode/

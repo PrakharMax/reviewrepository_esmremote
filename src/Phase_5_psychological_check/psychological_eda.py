@@ -1,4 +1,3 @@
-# phase_5_psychological_eda.py
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -64,7 +63,7 @@ def run_delta_eda():
                 ax=axes[2], square=True, fmt='.2f', annot_kws={"size": 12})
     axes[2].set_title('Raw Correlations: Workday Changes vs. Environment')
 
-    # Figure generation and file write handling (Rule 3)
+    # Figure generation and file write handling
     plt.tight_layout()
     output_file = OUTPUT_IMAGE_DIR / '4_Phase_5_Psychological_EDA.png'
     plt.savefig(output_file, dpi=300, bbox_inches='tight')
