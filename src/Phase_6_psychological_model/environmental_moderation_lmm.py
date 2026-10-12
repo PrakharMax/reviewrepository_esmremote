@@ -5,10 +5,25 @@ import statsmodels.formula.api as smf
 import sys
 from config import DATA_DIR
 import warnings
+
 warnings.filterwarnings("ignore")
 
 # Path configuration to the processed evening survey dataset
 EVENING_FILE = DATA_DIR / "Master_Evening_Centered.csv"
+
+
+def print_reviewer_stats(model, term_name, hypothesis_name):
+    """Extracts exact Beta, 95% CI, and p-value for the reviewer table."""
+    try:
+        b = model.params[term_name]
+        ci_l, ci_u = model.conf_int().loc[term_name]
+        p = model.pvalues[term_name]
+        print(f"\n--- TABLE 6 DATA: {hypothesis_name} ---")
+        print(f"Predictor: {term_name}")
+        print(f"LaTeX Output:  {b:.3f}  &  [{ci_l:.3f}, {ci_u:.3f}]  &  {p:.3f}")
+        print("---------------------------------------\n")
+    except Exception as e:
+        print(f"Error extracting stats for {term_name}: {e}")
 
 
 def calculate_pseudo_r2(model_result, model_name="Model"):
@@ -57,16 +72,18 @@ def run_moderation_analysis():
         print(f"ERROR: Failed to load specified data asset: {e}")
         sys.exit(1)
 
-    # Statistical array definition for targeted environmental variables
+    # 🛠️ CRITICAL FIX: Added Morning_Focus as baseline covariate
     target_cols = [
-        'Productivity_Retention_Gap',
+        'Evening_Productivity',
+        'Morning_Focus',
         'Within_Daily_CO2',
         'Light_Impact_Flag'
     ]
 
     # Enforcing continuous numeric float formatting across target arrays
     for col in target_cols:
-        df_eve[col] = pd.to_numeric(df_eve[col], errors='coerce')
+        if col in df_eve.columns:
+            df_eve[col] = pd.to_numeric(df_eve[col], errors='coerce')
 
     df_eve['ID'] = df_eve['ID'].astype(str)
 
@@ -75,19 +92,22 @@ def run_moderation_analysis():
     print(f"INFO: Running linear mixed moderation models on {len(df_mod)} complete observation rows.")
 
     # ---------------------------------------------------------
-    # Model 1: Additive Baseline Model
+    # Model 1: Additive Baseline Model (Avenue 3)
     # ---------------------------------------------------------
     print("\n" + "=" * 60)
     print("STATISTICAL LMM SUMMARY: INDEPENDENT ADDITIVE EFFECTS (CO2 + LIGHT)")
     print("=" * 60)
     try:
+        # 🛠️ CRITICAL FIX: Added Morning_Focus to formula
         mdl_add = smf.mixedlm(
-            formula="Productivity_Retention_Gap ~ Within_Daily_CO2 + Light_Impact_Flag",
+            formula="Evening_Productivity ~ Within_Daily_CO2 + Light_Impact_Flag + Morning_Focus",
             data=df_mod,
             groups=df_mod["ID"]
         ).fit(method='lbfgs')
 
         print(mdl_add.summary().tables[1])
+        # 🛠️ CRITICAL FIX: Extract stats from the additive model for Avenue 3
+        print_reviewer_stats(mdl_add, 'Light_Impact_Flag', 'Avenue 3: Visual Shielding (Lighting -> Productivity)')
         calculate_pseudo_r2(mdl_add, "Model 1")
     except Exception as e:
         print(f"ERROR: Model 1 estimation failed: {e}")
@@ -100,7 +120,7 @@ def run_moderation_analysis():
     print("=" * 60)
     try:
         mdl_int = smf.mixedlm(
-            formula="Productivity_Retention_Gap ~ Within_Daily_CO2 * Light_Impact_Flag",
+            formula="Evening_Productivity ~ Within_Daily_CO2 * Light_Impact_Flag + Morning_Focus",
             data=df_mod,
             groups=df_mod["ID"]
         ).fit(method='lbfgs')
@@ -111,7 +131,6 @@ def run_moderation_analysis():
         print("\nSTATISTICAL INFERENCE: EXACT VARIABLE P-VALUES")
         pvals = mdl_int.pvalues
 
-        # Statsmodels internally reformats interaction columns using a colon notation string ("VarA:VarB")
         interaction_term = "Within_Daily_CO2:Light_Impact_Flag"
 
         print(f"Intercept:                        {pvals['Intercept']:.10f}")
@@ -119,8 +138,6 @@ def run_moderation_analysis():
         print(f"Light Impact Flag:                {pvals['Light_Impact_Flag']:.10f}")
         if interaction_term in pvals:
             print(f"CO2 * Light Interaction:          {pvals[interaction_term]:.10f}")
-        else:
-            print("WARNING: Interaction parameter key mismatch during automated dictionary parsing.")
 
     except Exception as e:
         print(f"ERROR: Model 2 estimation failed: {e}")

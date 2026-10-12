@@ -33,21 +33,34 @@ df_morn_plot = df_morn.dropna(subset=['Morning_Focus', 'Sleep_Status'])
 n_sleep_yes = len(df_morn_plot[df_morn_plot['Sleep_Status'] == 'Yes (Good Sleep)'])
 n_sleep_no = len(df_morn_plot[df_morn_plot['Sleep_Status'] == 'No (Poor Sleep)'])
 
+# --- Apply Complete-Case Filter for Evening Data (Reviewer 1 & 3 Fix) ---
+time_col_eve = 'Helsinki Time' if 'Helsinki Time' in df_eve.columns else 'Timestamp'
+time_col_morn = 'Helsinki Time' if 'Helsinki Time' in df_morn.columns else 'Timestamp'
+
+df_eve['Date'] = pd.to_datetime(df_eve[time_col_eve], errors='coerce', utc=True).dt.tz_convert("Europe/Helsinki").dt.date
+df_morn['Date'] = pd.to_datetime(df_morn[time_col_morn], errors='coerce', utc=True).dt.tz_convert("Europe/Helsinki").dt.date
+
+valid_morning_days = df_morn[['ID', 'Date']].dropna().drop_duplicates()
+df_complete = pd.merge(df_eve, valid_morning_days, on=['ID', 'Date'], how='inner')
+
 # --- Clean Evening Data (Panel B) ---
+# Dynamically find and extract the numerical Evening Productivity score (Reviewer 2 Fix)
+prod_col_raw = [col for col in df_complete.columns if 'overall productivity level' in col.lower()][0]
+df_complete['Evening_Productivity'] = df_complete[prod_col_raw].astype(str).str.extract(r'(\d)').astype(float)
+
 # We rename columns to align with our plotting requirements and remove incomplete records
-df_eve_plot = df_eve.rename(columns={
-    'Within_Daily_CO2': 'CO2',
-    'Productivity_Retention_Gap': 'Prod_Gap'
-}).dropna(subset=['CO2', 'Prod_Gap', 'ID'])
+df_eve_plot = df_complete.rename(columns={
+    'Within_Daily_CO2': 'CO2'
+}).dropna(subset=['CO2', 'Evening_Productivity', 'ID'])
 
 n_eve = len(df_eve_plot)
 
 # --- Run the Mixed-Effects Model ---
-# We execute the LMM to derive the trendline parameters for the perception gap visualization
+# We execute the LMM to derive the trendline parameters for the visualization
 with warnings.catch_warnings():
     warnings.filterwarnings("ignore", message=".*covariance is singular.*")
     warnings.filterwarnings("ignore", message=".*The MLE may be on the boundary.*")
-    mdl = smf.mixedlm("Prod_Gap ~ CO2", df_eve_plot, groups=df_eve_plot["ID"]).fit()
+    mdl = smf.mixedlm("Evening_Productivity ~ CO2", df_eve_plot, groups=df_eve_plot["ID"]).fit()
 
 # We extract model parameters for trendline construction
 b0 = mdl.params['Intercept']
@@ -61,7 +74,7 @@ slope_100 = b1 * 100
 # --- Plotting Configuration ---
 sns.set_theme(style="whitegrid", palette="muted")
 fig, axes = plt.subplots(1, 2, figsize=(14, 6), dpi=300)
-fig.suptitle('Figure 3: Behavioral Perception vs. Environmental Reality', fontsize=16, fontweight='bold', y=1.05)
+#fig.suptitle('Figure 3: Behavioral Perception vs. Environmental Reality', fontsize=16, fontweight='bold', y=1.05)
 
 # --- Panel A: Focus vs Sleep ---
 sns.boxplot(
@@ -79,7 +92,7 @@ axes[0].set_ylabel('Morning Focus (1-5)', fontsize=11, fontweight='bold')
 axes[0].set_ylim(0.5, 5.5)
 
 # --- Panel B: Productivity vs Centered CO2 (LMM Trendline) ---
-axes[1].scatter(df_eve_plot['CO2'], df_eve_plot['Prod_Gap'], alpha=0.5, color='#55A868', edgecolor='w', s=50)
+axes[1].scatter(df_eve_plot['CO2'], df_eve_plot['Evening_Productivity'], alpha=0.5, color='#55A868', edgecolor='w', s=50)
 
 # We generate X values for trendline projection
 x_vals = np.linspace(df_eve_plot['CO2'].min(), df_eve_plot['CO2'].max(), 100)
@@ -93,13 +106,14 @@ y_lower = (b0 - z_val * std_err_b0) + (b1 - z_val * std_err_b1) * x_vals
 # We plot the trendline and the ribbon
 axes[1].plot(x_vals, y_vals, color='#C44E52', linewidth=3, label=f'LMM Trend (Slope: {slope_100:.2f} per 100ppm)')
 axes[1].fill_between(x_vals, y_lower, y_upper, color='#C44E52', alpha=0.2, label='95% Confidence Interval')
-axes[1].set_title(f'Panel B: Productivity Gap ignores Air Quality\n(Continuous Exposure, n={n_eve} observations)', fontsize=13)
+axes[1].set_title(f'Panel B: Evening Productivity ignores Air Quality\n(Complete-Case, n={n_eve} observations)', fontsize=13)
 
-axes[1].set_ylim(-3.5, 2.5)
+# Resetting Y-axis limits to match the 1-5 Likert scale
+axes[1].set_ylim(0.5, 5.5)
 
 # We standardize axis labels using LaTeX-style formatting
 axes[1].set_xlabel('Within-Person $CO_2$ Deviation (ppm from baseline)', fontsize=11, fontweight='bold')
-axes[1].set_ylabel('Workday Productivity Gap (Evening - Morning)', fontsize=11, fontweight='bold')
+axes[1].set_ylabel('Evening Productivity (1-5)', fontsize=11, fontweight='bold')
 axes[1].legend(loc='upper right')
 
 # We add a rugplot to illustrate data density distribution
@@ -109,6 +123,6 @@ sns.rugplot(data=df_eve_plot, x='CO2', ax=axes[1], color='black', alpha=0.3, hei
 plt.tight_layout()
 sns.despine(left=True, bottom=True)
 
-output_fig = OUTPUT_IMAGE_DIR / 'Final_LMM_Subjective_Anchor.png'
+output_fig = OUTPUT_IMAGE_DIR/ 'Final_LMM_Subjective_Anchor.png'
 plt.savefig(output_fig, bbox_inches='tight')
 print(f"INFO: High-resolution Figure 3 exported successfully to path: {output_fig}")

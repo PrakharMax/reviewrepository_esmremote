@@ -50,7 +50,7 @@ def generate_environmental_context():
     )
 
     # We add the ASHRAE/CEN standard reference line (1000 ppm)
-    plt.axhline(1000, color='#d62728', linestyle='--', linewidth=2, label='ASHRAE 1000ppm Threshold')
+    plt.axhline(1000, color='#d62728', linestyle='--', linewidth=2, label='1000 ppm Reference Level')
 
     # We apply formatting for academic publication
     plt.title(r'Daily $CO_2$ Exposure Ranges Across Participants', fontsize=16, fontweight='bold', pad=15)

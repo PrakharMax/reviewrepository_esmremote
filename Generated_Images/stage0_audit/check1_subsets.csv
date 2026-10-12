@@ -1,0 +1,6 @@
+subset,blocks,participants,beta_per_100ppm,se,p
+"A. V9 as published (all hours, all days)",4730,19,-0.395,0.053,1.04e-13
+B. Night only (00:00 to 07:00),807,14,-0.628,0.1,3.56e-10
+C. Weekdays 09:00 to 17:00,2213,19,0.353,0.113,0.00179
+D. C plus recovery filter applied,2072,19,0.411,0.119,0.000565
+E. D plus last Cozie status not an away state,1300,19,-0.382,0.134,0.00433

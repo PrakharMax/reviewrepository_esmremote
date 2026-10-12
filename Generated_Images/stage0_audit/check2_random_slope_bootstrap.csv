@@ -1,0 +1,10 @@
+,0
+random_slope_beta_per_100ppm,-0.20925813051167294
+se,0.30495702699363303
+p_z,0.4925939890089689
+p_t_df18,0.5013380677991648
+slope_sd_per_100ppm,1.2062149920034093
+bootstrap_reps,500.0
+bootstrap_ci_low,-0.682207602475092
+bootstrap_ci_high,0.6935329192141487
+bootstrap_share_negative,0.808

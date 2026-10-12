@@ -8,3 +8,9 @@ __pycache__/
 # IDEs
 .idea/
 .vscode/
+
+# Study data (available on request only)
+Processed_Database/*.csv
+
+# Local environment
+.venv/

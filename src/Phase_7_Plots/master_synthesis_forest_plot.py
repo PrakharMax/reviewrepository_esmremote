@@ -4,6 +4,7 @@ import numpy as np
 import seaborn as sns
 from config import DATA_DIR, OUTPUT_IMAGE_DIR
 
+
 def generate_forest_plot():
     """
     Synthesizes multi-phase regression model metrics to generate a publication-grade
@@ -14,21 +15,22 @@ def generate_forest_plot():
     # We define our multi-dimensional registry tracking standardized effect sizes and confidence intervals
     results = [
         # --- PART I: THE BODY (Objective Physiology) ---
+        # UPDATED: Using the strict 30-min non-overlapping LMM results (Reviewer 1 fix)
         ("HEADER", "PART I: The Body\n(Objective Physiology)", np.nan, np.nan, np.nan, 1.0),
-        ("Phase 4: Real-Time HR", "CO2 (per 100ppm)", -0.700, -0.700, -0.600, 0.000),
-        ("Phase 4: Delayed HR", "30m Lagged CO2 (per 100ppm)", -0.650, -1.000, -0.300, 0.00065),
-        ("Phase 4: Real-Time HR", "Temperature (°C)", 0.479, 0.397, 0.561, 0.000),
+        ("Phase 4: Heart Rate (30m Block)", "CO2 (per 100ppm)", -0.400, -0.500, -0.300, 0.000),
+        ("Phase 4: Heart Rate (30m Block)", "Temperature (°C)", 0.871, 0.610, 1.133, 0.000),
 
         # Structural spacing demarcation
         ("SPACER", "", np.nan, np.nan, np.nan, 1.0),
 
         # --- PART II: THE EVENING MIND (Subjective Workday Decay) ---
+        # UPDATED: Complete-Case Analysis & direct Evening Productivity (Reviewer 2 & 3 fix)
         ("HEADER", "PART II: The Evening Mind\n(Subjective Workday Decay)", np.nan, np.nan, np.nan, 1.0),
-        ("Phase 6: Productivity Gap", "CO2 (per 100ppm)", 0.000, 0.000, 0.100, 0.539),
-        ("Phase 6: Productivity Gap", "Temperature (°C)", 0.062, -0.026, 0.150, 0.165),
-        ("Phase 6: Productivity Gap", "Screen Time (per Hour)", -0.180, -0.280, -0.080, 0.000),
-        ("Phase 6: Stress Delta", "CO2 (per 100ppm)", 0.000, -0.100, 0.100, 0.752),
-        ("Phase 6: Stress Delta", "Temperature (°C)", 0.060, -0.041, 0.160, 0.244),
+        ("Phase 6: Evening Productivity", "CO2 (per 100ppm)", -0.020, -0.080, 0.040, 0.576),
+        ("Phase 6: Evening Productivity", "Temperature (°C)", 0.057, -0.030, 0.144, 0.198),
+        ("Phase 6: Evening Productivity", "Screen Time (per Hour)", -0.180, -0.280, -0.080, 0.000),
+        ("Phase 6: Stress Delta", "CO2 (per 100ppm)", -0.020, -0.100, 0.060, 0.610),
+        ("Phase 6: Stress Delta", "Temperature (°C)", 0.087, -0.026, 0.200, 0.132),
 
         # Structural spacing demarcation
         ("SPACER", "", np.nan, np.nan, np.nan, 1.0),
@@ -117,10 +119,8 @@ def generate_forest_plot():
     ax.set_title("Master Synthesis: Physiological Reality vs. Psychological Perception", fontsize=15, weight='bold', pad=20)
 
     # Contextual grouping backgrounds matching row matrix configurations
-    # Part III: Morning Mind block index boundaries
     ax.axhspan(-0.5, 6.5, color='gray', alpha=0.05, zorder=0)
-    # Part I: Objective Physiology block index boundaries
-    ax.axhspan(14.5, 18.5, color='gray', alpha=0.05, zorder=0)
+    ax.axhspan(13.5, 16.5, color='gray', alpha=0.05, zorder=0) # Adjusted boundaries for removed Delayed HR row
 
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)

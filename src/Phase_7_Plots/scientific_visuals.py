@@ -11,7 +11,6 @@ from matplotlib.colors import LinearSegmentedColormap
 from config import DATA_DIR, OUTPUT_IMAGE_DIR
 
 # We suppress convergence warnings globally to ensure clean execution and console output
-# throughout the scientific visualization pipeline.
 warnings.filterwarnings("ignore")
 
 # --- 1. CONFIGURATION ---
@@ -42,11 +41,14 @@ def run_phase7_scientific_visuals():
     df_cozie['ID'] = df_cozie['ID'].astype(str)
 
     df_morn['Morning_Focus'] = clean_likert(df_morn[
-        'Rate your focus level right now (1–5) Please select the option that best describes your current focus level:'])
+                                                'Rate your focus level right now (1–5) Please select the option that best describes your current focus level:'])
     df_morn['Good_Sleep'] = df_morn['Control_Good_Sleep']
 
+    # Reviewer 2 Fix: Extract Evening Productivity dynamically
+    prod_col_raw = [col for col in df_eve.columns if 'overall productivity level' in col.lower()][0]
+    df_eve['Evening_Productivity'] = clean_likert(df_eve[prod_col_raw])
+
     # --- TIME PARSING FOR CONTINUOUS DATA ---
-    # We parse and normalize timestamps to Helsinki local time to maintain biological consistency.
     df_cozie['Timestamp_DT'] = pd.to_datetime(df_cozie['index'], errors='coerce', utc=True)
     df_cozie['Timestamp_DT'] = df_cozie['Timestamp_DT'].dt.tz_convert('Europe/Helsinki')
     df_cozie['Hour_of_Day'] = df_cozie['Timestamp_DT'].dt.hour + (df_cozie['Timestamp_DT'].dt.minute / 60.0)
@@ -56,9 +58,23 @@ def run_phase7_scientific_visuals():
     df_cozie = df_cozie.sort_values(['ID', 'Timestamp_DT'])
     df_cozie['CO2_Lag30m'] = df_cozie.groupby('ID')['Within_CO2'].shift(6)
 
-    # --- PART A: REAL-TIME LMM ---
-    hr_cols = ['HR_Pre_10m_Avg', 'Within_CO2', 'Steps_Pre_10m_Sum', 'Within_Temperature', 'Hour_Centered', 'ID']
-    df_hr = df_cozie.dropna(subset=hr_cols).copy()
+    # =====================================================================
+    # --- PART A: REAL-TIME LMM (STRICT 30-MIN NON-OVERLAPPING BLOCKS) ---
+    # =====================================================================
+    hr_cols = ['HR_Pre_10m_Avg', 'Within_CO2', 'Steps_Pre_10m_Sum', 'Within_Temperature', 'Hour_Centered', 'ID',
+               'Timestamp_DT']
+    df_hr_raw = df_cozie.dropna(subset=hr_cols).copy()
+
+    # Apply Pandas Grouper to forcefully remove overlapping sliding windows
+    df_hr = df_hr_raw.groupby([
+        'ID', pd.Grouper(key='Timestamp_DT', freq='30min')
+    ]).agg({
+        'HR_Pre_10m_Avg': 'mean',
+        'Within_CO2': 'mean',
+        'Steps_Pre_10m_Sum': 'mean',
+        'Within_Temperature': 'mean',
+        'Hour_Centered': 'mean'
+    }).dropna().reset_index()
 
     hr_model = smf.mixedlm("HR_Pre_10m_Avg ~ Within_CO2 + Steps_Pre_10m_Sum + Within_Temperature + Hour_Centered",
                            df_hr, groups=df_hr["ID"]).fit()
@@ -71,8 +87,8 @@ def run_phase7_scientific_visuals():
     lag_model = sm.OLS(df_lag['HR_Pre_10m_Avg'], X_lag).fit(cov_type='cluster', cov_kwds={'groups': df_lag['ID']})
 
     # --- PART C: THE PSYCHOLOGICAL DELTAS ---
-    df_h1 = df_eve.dropna(subset=['Productivity_Retention_Gap', 'Within_Daily_CO2', 'ID']).copy()
-    h1_res = smf.mixedlm("Productivity_Retention_Gap ~ Within_Daily_CO2", df_h1, groups=df_h1["ID"]).fit()
+    df_h1 = df_eve.dropna(subset=['Evening_Productivity', 'Within_Daily_CO2', 'ID']).copy()
+    h1_res = smf.mixedlm("Evening_Productivity ~ Within_Daily_CO2", df_h1, groups=df_h1["ID"]).fit()
 
     df_h4 = df_morn.dropna(subset=['Morning_Focus', 'Within_CO2', 'Good_Sleep', 'ID']).copy()
     h4_res = smf.mixedlm("Morning_Focus ~ Within_CO2 + Good_Sleep", df_h4, groups=df_h4["ID"]).fit()
@@ -93,7 +109,7 @@ def run_phase7_scientific_visuals():
     forest_data = [
         {'Label': 'Real-Time HR Sedation (LMM)', 'Res': hr_model, 'Var': 'Within_CO2'},
         {'Label': 'Delayed HR Sedation (30m Lag)', 'Res': lag_model, 'Var': 'CO2_Lag30m'},
-        {'Label': 'Workday: Focus Gap', 'Res': h1_res, 'Var': 'Within_Daily_CO2'},
+        {'Label': 'Workday: Evening Productivity', 'Res': h1_res, 'Var': 'Within_Daily_CO2'},
         {'Label': 'Baseline: Morning Focus', 'Res': h4_res, 'Var': 'Within_CO2'},
         {'Label': 'Baseline: Effect of Sleep', 'Res': h4_res, 'Var': 'Good_Sleep'}
     ]
@@ -121,10 +137,11 @@ def run_phase7_scientific_visuals():
     plt.savefig(out_forest, dpi=300)
     print(f"INFO: Forest plot saved to {out_forest.name}")
 
-    # --- FIGURE 3: THE SEDATION TREND (COVARIATE ADJUSTED) ---
+    # =====================================================================
+    # --- FIGURE 3: THE SEDATION TREND (COVARIATE ADJUSTED LMM) ---
+    # =====================================================================
     plt.figure(figsize=(10, 6))
 
-    # We initialize a custom colormap to ensure density clusters remain legible in publication grayscale
     soft_grey = LinearSegmentedColormap.from_list('soft_grey', ['#ffffff', '#eeeeee', '#bbbbbb'])
 
     plt.hexbin(df_hr['Within_CO2'], df_hr['HR_Pre_10m_Avg'],
@@ -146,7 +163,6 @@ def run_phase7_scientific_visuals():
 
     y_pred = hr_model.predict(X_pred)
 
-    # Covariance matrix arithmetic for confidence interval derivation
     cov_matrix = hr_model.cov_params()[X_pred.columns].loc[X_pred.columns]
     pred_var = np.diag(np.dot(np.dot(X_pred, cov_matrix), X_pred.T))
     pred_se = np.sqrt(pred_var)
@@ -154,32 +170,29 @@ def run_phase7_scientific_visuals():
     ci_upper = y_pred + (1.96 * pred_se)
     ci_lower = y_pred - (1.96 * pred_se)
 
-    # Narrative visualization: Muted Burgundy Trendline and Lighter CI
     burgundy = '#800020'
     lighter_burgundy = '#b36680'
-    plt.plot(x_range, y_pred, color=burgundy, linewidth=3, label='Adjusted GEE Trend')
+    plt.plot(x_range, y_pred, color=burgundy, linewidth=3, label='Adjusted LMM Trend')
 
     plt.fill_between(x_range, ci_lower, ci_upper, color=lighter_burgundy, alpha=0.15, label='95% CI')
 
     plt.scatter([], [], color='gray', alpha=0.4, label='Observation Density')
 
-    # Axis scaling: Cropped to the meaningful environmental variance
     plt.ylim(55, 125)
     plt.xlim(-600, 600)
 
-    # Final narrative elements
-    plt.title("Heart Rate Declines Slightly with Elevated $CO_2$ (Adjusted GEE Trend)",
-          fontsize=14, fontweight='bold', pad=15)
+    plt.title("Heart Rate Declines Slightly with Elevated $CO_2$ ",
+              fontsize=14, fontweight='bold', pad=15)
     plt.xlabel("$CO_2$ Deviation from Personal Baseline (ppm)", fontsize=12)
     plt.ylabel("Continuous Heart Rate (BPM)", fontsize=12)
 
-    # Interpretive statistics box
+    # Updated Interpretive statistics box
     beta_val = hr_model.params['Within_CO2']
-    stat_text = (f"Model: Generalized Estimating Equations\n"
+    stat_text = (f"Model: Linear Mixed Model (Non-Overlapping)\n"
                  f"Controls: Time, Steps, Temp\n"
                  f"N = {len(df_hr):,}\n"
                  f"β = {beta_val:.3f} BPM/ppm\n"
-                 f"(≈ 0.7 BPM decrease per 100 ppm)\n"
+                 f"(≈ {abs(beta_val * 100):.1f} BPM decrease per 100 ppm)\n"
                  f"p < 0.001")
 
     plt.text(0.96, 0.95, stat_text, transform=plt.gca().transAxes,

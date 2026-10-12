@@ -1,133 +1,103 @@
-# phase_6_psychological_mediation_lmm.py
 import pandas as pd
-import numpy as np
 import statsmodels.formula.api as smf
-import sys
-from config import DATA_DIR
+from pathlib import Path
 import warnings
+
 warnings.filterwarnings("ignore")
+from config import DATA_DIR
 
-# Path configuration to the processed evening survey dataset
-EVENING_FILE = DATA_DIR / "Master_Evening_Centered.csv"
-
-
-def calculate_pseudo_r2(model_result, model_name="Model"):
-    """
-    Calculates Marginal and Conditional R-squared values for the linear mixed-effects
-    model based on the Nakagawa & Schielzeth (2013) variance decomposition framework.
-    """
-    try:
-        # Variance calculation of the fixed effect predictions
-        fixed_effects_var = np.var(model_result.predict())
-
-        # Extraction of random effect variance (between-person tau_00)
-        random_effects_var = float(model_result.cov_re.iloc[0, 0])
-
-        # Extraction of residual variance (within-person sigma^2 noise)
-        residual_var = model_result.scale
-
-        # Total variance summation across fixed, random, and residual components
-        total_var = fixed_effects_var + random_effects_var + residual_var
-
-        # Variance proportions derivation
-        r2_marginal = fixed_effects_var / total_var
-        r2_conditional = (fixed_effects_var + random_effects_var) / total_var
-
-        print(f"\nINFO: {model_name} Pseudo R-Squared Diagnostics")
-        print(f"Marginal R2 (Fixed Effects Proportion):     {r2_marginal:.3f}")
-        print(f"Conditional R2 (Total Explained Variance):   {r2_conditional:.3f}")
-
-        return r2_marginal, r2_conditional
-
-    except Exception as e:
-        print(f"ERROR: Could not compute pseudo R2 variance components: {e}")
-        return np.nan, np.nan
+# --- CONFIGURATION ---
+EVENING_FILE =  DATA_DIR / "Master_Evening_Centered.csv"
+MORNING_FILE = DATA_DIR / "Master_Morning_Centered.csv"
 
 
-def run_mediation_analysis():
-    """
-    Executes a multi-stage linear mixed-effects regression pipeline to evaluate
-    the statistical mediation pathway connecting CO2 exposure, symptoms, and productivity.
-    """
-    print("INFO: Loading processed evening dataset for mediation pathway tracking...")
+def run_phase6_models():
+    print("🚀 Loading Survey Data for Phase 6 Models (Complete-Case Analysis)...")
     try:
         df_eve = pd.read_csv(EVENING_FILE, low_memory=False)
-        df_eve.columns = df_eve.columns.str.strip()
-    except Exception as e:
-        print(f"ERROR: Failed to load specified data asset: {e}")
-        sys.exit(1)
-
-    # Statistical array definition for targeted validation parameters
-    target_cols = [
-        'Productivity_Retention_Gap',
-        'Within_Daily_CO2',
-        'Evening_Symptom_Count'
-    ]
-
-    # Enforcing continuous numeric float formatting across target arrays
-    for col in target_cols:
-        df_eve[col] = pd.to_numeric(df_eve[col], errors='coerce')
+        df_morn = pd.read_csv(MORNING_FILE, low_memory=False)
+    except FileNotFoundError as e:
+        print(f"❌ File not found: {e}")
+        return
 
     df_eve['ID'] = df_eve['ID'].astype(str)
+    df_morn['ID'] = df_morn['ID'].astype(str)
 
-    # Complete observation filtration isolating valid longitudinal rows
-    df_med = df_eve.dropna(subset=target_cols + ['ID']).copy()
-    print(f"INFO: Complete data rows identified for mediation pipeline: {len(df_med)}")
+    # --- COMPLETE-CASE FILTER (Reviewer 1, Point 6) ---
+    time_col_eve = 'Helsinki Time' if 'Helsinki Time' in df_eve.columns else 'Timestamp'
+    time_col_morn = 'Helsinki Time' if 'Helsinki Time' in df_morn.columns else 'Timestamp'
 
-    if len(df_med) == 0:
-        print("ERROR: Zero observations remaining after dropping missing rows. Execution halted.")
-        sys.exit(1)
+    df_eve['Date'] = pd.to_datetime(df_eve[time_col_eve], errors='coerce', utc=True).dt.tz_convert(
+        "Europe/Helsinki").dt.date
+    df_morn['Date'] = pd.to_datetime(df_morn[time_col_morn], errors='coerce', utc=True).dt.tz_convert(
+        "Europe/Helsinki").dt.date
 
-    # ---------------------------------------------------------
-    # Model 1: Path A Evaluation (CO2 -> Symptoms)
-    # ---------------------------------------------------------
-    print("\n" + "=" * 60)
-    print("STATISTICAL LMM SUMMARY: MEDIATION PATH A (CO2 -> SYMPTOMS)")
-    print("=" * 60)
+    valid_morning_days = df_morn[['ID', 'Date']].dropna().drop_duplicates()
+    df_complete = pd.merge(df_eve, valid_morning_days, on=['ID', 'Date'], how='inner')
+
+    print(f"🧹 Complete-Case Filter applied: Reduced from {len(df_eve)} to {len(df_complete)} strictly matched days.")
+
+    # ==========================================
+    # 🧠 MODEL 1: EVENING PRODUCTIVITY (Reviewer 2 Fix)
+    # ==========================================
+
+    # 1. Dynamically find the raw Webropol question column
+    prod_col_raw = [col for col in df_complete.columns if 'overall productivity level' in col.lower()][0]
+
+    # 2. Extract the numeric score (1-5) from the text response and create our target variable
+    df_complete['Evening_Productivity'] = df_complete[prod_col_raw].astype(str).str.extract(r'(\d)').astype(float)
+
+    model1_vars = ['Evening_Productivity', 'Within_Daily_CO2', 'Within_Daily_Temperature', 'ID']
+    df_m1 = df_complete.dropna(subset=model1_vars)
+
+    print(f"\n📊 Running LMM for Evening_Productivity on {len(df_m1)} complete-case workdays...")
+    formula_m1 = "Evening_Productivity ~ Within_Daily_CO2 + Within_Daily_Temperature"
+
     try:
-        mdl_a = smf.mixedlm(
-            formula="Evening_Symptom_Count ~ Within_Daily_CO2",
-            data=df_med,
-            groups=df_med["ID"]
-        ).fit(method='lbfgs')
+        model1 = smf.mixedlm(formula_m1, df_m1, groups=df_m1["ID"])
+        result1 = model1.fit()
+        print("\n" + "=" * 60)
+        print("🏆 PHASE 6: HYPOTHESIS 1 (EVENING PRODUCTIVITY) - COMPLETE CASE")
+        print("=" * 60)
+        print(result1.summary())
 
-        print(mdl_a.summary().tables[1])
-        calculate_pseudo_r2(mdl_a, "Model 1: CO2 -> Symptoms")
-
-        print("\nSTATISTICAL INFERENCE p-VALUES")
-        pvals_a = mdl_a.pvalues
-        print(f"Within_Daily_CO2 parameter coefficient: {pvals_a['Within_Daily_CO2']:.10f}")
-
+        print("\n🔬 EXACT P-VALUES & CONFIDENCE INTERVALS FOR TABLES")
+        for term in result1.params.index:
+            coef = result1.params[term]
+            se = result1.bse[term]
+            pval = result1.pvalues[term]
+            ci_low, ci_high = result1.conf_int().loc[term]
+            print(f"{term:25}: Coef={coef:.4f}, SE={se:.4f}, p={pval:.4e}, 95% CI=[{ci_low:.4f}, {ci_high:.4f}]")
     except Exception as e:
-        print(f"ERROR: Model 1 parameter estimation failed: {e}")
+        print(f"Model 1 failed to converge: {e}")
 
-    print("\n" + "=" * 60 + "\n")
+    # ==========================================
+    # 😰 MODEL 2: STRESS DELTA
+    # ==========================================
+    model2_vars = ['Stress_Delta', 'Within_Daily_CO2', 'Within_Daily_Temperature', 'ID']
+    df_m2 = df_complete.dropna(subset=model2_vars)
 
-    # ---------------------------------------------------------
-    # Model 2: Path B Evaluation (Symptoms -> Productivity)
-    # ---------------------------------------------------------
-    print("=" * 60)
-    print("STATISTICAL LMM SUMMARY: MEDIATION PATH B (SYMPTOMS -> PRODUCTIVITY)")
-    print("=" * 60)
+    print(f"\n📊 Running LMM for Stress Delta on {len(df_m2)} complete-case workdays...")
+    formula_m2 = "Stress_Delta ~ Within_Daily_CO2 + Within_Daily_Temperature"
+
     try:
-        mdl_b = smf.mixedlm(
-            formula="Productivity_Retention_Gap ~ Evening_Symptom_Count + Within_Daily_CO2",
-            data=df_med,
-            groups=df_med["ID"]
-        ).fit(method='lbfgs')
+        model2 = smf.mixedlm(formula_m2, df_m2, groups=df_m2["ID"])
+        result2 = model2.fit()
+        print("\n" + "=" * 60)
+        print("🏆 PHASE 6: HYPOTHESIS 2 (STRESS DELTA) - COMPLETE CASE")
+        print("=" * 60)
+        print(result2.summary())
 
-        print(mdl_b.summary().tables[1])
-        calculate_pseudo_r2(mdl_b, "Model 2: Symptoms -> Productivity")
-
-        print("\nSTATISTICAL INFERENCE p-VALUES")
-        pvals_b = mdl_b.pvalues
-        print(f"Evening_Symptom_Count descriptor factor: {pvals_b['Evening_Symptom_Count']:.10f}")
-        print(f"Within_Daily_CO2 direct effect factor:   {pvals_b['Within_Daily_CO2']:.10f}")
-
+        print("\n🔬 EXACT P-VALUES & CONFIDENCE INTERVALS FOR TABLES")
+        for term in result2.params.index:
+            coef = result2.params[term]
+            se = result2.bse[term]
+            pval = result2.pvalues[term]
+            ci_low, ci_high = result2.conf_int().loc[term]
+            print(f"{term:25}: Coef={coef:.4f}, SE={se:.4f}, p={pval:.4e}, 95% CI=[{ci_low:.4f}, {ci_high:.4f}]")
     except Exception as e:
-        print(f"ERROR: Model 2 parameter estimation failed: {e}")
-    print("=" * 60)
+        print(f"Model 2 failed to converge: {e}")
 
 
 if __name__ == "__main__":
-    run_mediation_analysis()
+    run_phase6_models()
